@@ -1,10 +1,8 @@
 import re
 
-import matplotlib.pyplot as plt
 import nltk
 import numpy as np
 import pandas as pd
-import seaborn as sn
 from nltk.corpus import stopwords
 from nltk.stem.porter import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer
@@ -43,8 +41,6 @@ Confusion_Matrix = confusion_matrix(y_test, y_pred)
 Accuracy_Score = accuracy_score(y_test, y_pred)
 
 df_cm = pd.DataFrame(Confusion_Matrix, range(2), range(2))
-sn.set(font_scale=1.4)
-sn.heatmap(df_cm, annot=True, annot_kws={"size": 16})
 print("Accuracy Score is: ", Accuracy_Score)
 
 
