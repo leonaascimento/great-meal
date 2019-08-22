@@ -4,8 +4,9 @@ import nltk
 import numpy as np
 import pandas as pd
 from nltk import pos_tag, word_tokenize
-from nltk.corpus import wordnet
+from nltk.corpus import stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
+from nltk.stem.porter import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.model_selection import cross_validate
 from sklearn.naive_bayes import MultinomialNB
@@ -28,28 +29,48 @@ def wordnet_tag(penn_tag):
         return None
 
 
-dataset = pd.read_csv('assets/Restaurant_Reviews.tsv', delimiter='\t')
+def default_treatment(reviews):
+    regex = r"[-'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
+    stemmer = PorterStemmer()
 
-regex = r"[-'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
-lemmatizer = WordNetLemmatizer()
+    corpus = []
+    for review in reviews:
+        words = re.findall(regex, review)
+        stems = [stemmer.stem(word) for word in words if not word in set(
+            stopwords.words('english'))]
 
-corpus = []
-for review in dataset['Review']:
-    words = re.findall(regex, review)
-    tagged_review = pos_tag(words)
+        corpus.append(' '.join(stems))
 
-    lemmas = []
-    for word, penn_tag in tagged_review:
-        tag = wordnet_tag(penn_tag)
+    X = corpus
+    y = dataset.iloc[:, 1].values
 
-        if tag in (wordnet.NOUN, wordnet.ADJ, wordnet.ADV):
-            lemma = lemmatizer.lemmatize(word, pos=tag)
-            lemmas.append(f'{lemma}_{penn_tag[0]}')
+    return (X, y)
 
-    corpus.append(' '.join(lemmas))
 
-X = corpus
-y = dataset.iloc[:, 1].values
+def improved_treatment(reviews):
+    regex = r"[-'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
+    lemmatizer = WordNetLemmatizer()
+
+    corpus = []
+    for review in reviews:
+        words = re.findall(regex, review)
+        tagged_review = pos_tag(words)
+
+        lemmas = []
+        for word, penn_tag in tagged_review:
+            tag = wordnet_tag(penn_tag)
+
+            if tag in (wordnet.NOUN, wordnet.ADJ, wordnet.ADV):
+                lemma = lemmatizer.lemmatize(word, pos=tag)
+                lemmas.append(f'{lemma}_{penn_tag[0]}')
+
+        corpus.append(' '.join(lemmas))
+
+    X = corpus
+    y = dataset.iloc[:, 1].values
+
+    return (X, y)
+
 
 pipes = []
 pipes.append(('unigram MultinomialNB', make_pipeline(
@@ -72,19 +93,30 @@ pipes.append(('unigram+bigram LinearSVC', make_pipeline(
     CountVectorizer(ngram_range=(1, 2)),
     LinearSVC())))
 
+dataset = pd.read_csv('assets/Restaurant_Reviews.tsv', delimiter='\t')
+
+X1, y1 = default_treatment(dataset['Review'])
+X2, y2 = improved_treatment(dataset['Review'])
+
+corpora = []
+corpora.append(('default treatment', X1, y1))
+corpora.append(('improved treatment', X2, y2))
+
 for title, pipe in pipes:
     scoring = {
         'accuracy': 'accuracy',
         'precision': 'precision',
         'recall': 'recall'
     }
-    scores = cross_validate(
-        pipe, X, y, cv=10, scoring=scoring, return_train_score=False)
 
-    print(f"\nScores for {title}")
-    print("  accuracy: %.3f +/- %.3f" %
-          (scores['test_accuracy'].mean(), scores['test_accuracy'].std()))
-    print("  precision: %.3f +/- %.3f" %
-          (scores['test_precision'].mean(), scores['test_precision'].std()))
-    print("  recall: %.3f +/- %.3f" %
-          (scores['test_recall'].mean(), scores['test_recall'].std()))
+    for treatment, X, y in corpora:
+        scores = cross_validate(
+            pipe, X, y, cv=10, scoring=scoring, return_train_score=False)
+
+        print(f"\nScores for {title} with {treatment}")
+        print("  accuracy: %.3f +/- %.3f" %
+              (scores['test_accuracy'].mean(), scores['test_accuracy'].std()))
+        print("  precision: %.3f +/- %.3f" %
+              (scores['test_precision'].mean(), scores['test_precision'].std()))
+        print("  recall: %.3f +/- %.3f" %
+              (scores['test_recall'].mean(), scores['test_recall'].std()))
