@@ -3,64 +3,53 @@ import re
 import nltk
 import numpy as np
 import pandas as pd
-from nltk.corpus import stopwords
-from nltk.stem.porter import PorterStemmer
+from nltk import pos_tag, word_tokenize
+from nltk.corpus import sentiwordnet, stopwords, wordnet
+from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import GaussianNB
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.naive_bayes import MultinomialNB
 
-dataset = pd.read_csv('assets/Restaurant_Reviews.tsv',
-                      delimiter='\t', quoting=3)
-dataset.head()
+
+def wordnet_tag(penn_tag):
+    if penn_tag.startswith('J'):
+        return wordnet.ADJ
+    elif penn_tag.startswith('V'):
+        return wordnet.VERB
+    elif penn_tag.startswith('N'):
+        return wordnet.NOUN
+    elif penn_tag.startswith('R'):
+        return wordnet.ADV
+    else:
+        return wordnet.NOUN
+
+
+dataset = pd.read_csv('assets/Restaurant_Reviews.tsv', delimiter='\t')
+
+regex = r"[-'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
+lemmatizer = WordNetLemmatizer()
 
 corpus = []
-for i in range(0, 1000):
-    review = re.sub('[^a-zA-Z]', ' ', dataset['Review'][i])
-    review = review.lower()
-    review = review.split()
-    ps = PorterStemmer()
-    review = [ps.stem(word) for word in review if not word in set(
-        stopwords.words('english'))]
-    review = ' '.join(review)
-    corpus.append(review)
+for review in dataset['Review']:
+    words = re.findall(regex, review)
+    tagged_review = pos_tag(words)
 
-cv = CountVectorizer(max_features=1500)
-X = cv.fit_transform(corpus).todense()
+    lemmas = []
+    for word, penn_tag in tagged_review:
+        tag = wordnet_tag(penn_tag)
+
+        if tag in (wordnet.NOUN, wordnet.ADJ, wordnet.ADV):
+            lemma = lemmatizer.lemmatize(word, pos=tag)
+            lemmas.append(f'{lemma}_{penn_tag[0]}')
+
+    corpus.append(' '.join(lemmas))
+
+vectorizer = CountVectorizer(ngram_range=(1, 2))
+X = vectorizer.fit_transform(corpus).toarray()
 y = dataset.iloc[:, 1].values
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.20, random_state=0)
+classifier = MultinomialNB()
+scores = cross_val_score(classifier, X, y, cv=10)
 
-classifier = GaussianNB()
-classifier.fit(X_train, y_train)
-
-y_pred = classifier.predict(X_test)
-
-Confusion_Matrix = confusion_matrix(y_test, y_pred)
-Accuracy_Score = accuracy_score(y_test, y_pred)
-
-df_cm = pd.DataFrame(Confusion_Matrix, range(2), range(2))
-print("Accuracy Score is: ", Accuracy_Score)
-
-
-def predict(new_review):
-    new_review = re.sub('[^a-zA-Z]', ' ', new_review)
-    new_review = new_review.lower().split()
-    new_review = [ps.stem(word) for word in new_review if word not in set(
-        stopwords.words('english'))]
-    new_review = ' '.join(new_review)
-    new_review = [new_review]
-    new_review = cv.transform(new_review).toarray()
-
-    if classifier.predict(new_review)[0] == 1:
-        return 'Positive'
-    else:
-        return 'Negative'
-
-
-new_review = input('Add a review: ')
-while new_review != '':
-    feedback = predict(new_review)
-    print('This review is: ', feedback)
-    new_review = input('Add a review: ')
+print(scores)
+print("Accuracy Score is: ", scores.mean())
