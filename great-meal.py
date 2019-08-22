@@ -4,11 +4,15 @@ import nltk
 import numpy as np
 import pandas as pd
 from nltk import pos_tag, word_tokenize
-from nltk.corpus import sentiwordnet, stopwords, wordnet
+from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.model_selection import cross_validate
 from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import make_pipeline
+from sklearn.svm import LinearSVC
+
+from naive_bayes import SentiLexiconNB
 
 
 def wordnet_tag(penn_tag):
@@ -21,7 +25,7 @@ def wordnet_tag(penn_tag):
     elif penn_tag.startswith('R'):
         return wordnet.ADV
     else:
-        return wordnet.NOUN
+        return None
 
 
 dataset = pd.read_csv('assets/Restaurant_Reviews.tsv', delimiter='\t')
@@ -44,12 +48,43 @@ for review in dataset['Review']:
 
     corpus.append(' '.join(lemmas))
 
-vectorizer = CountVectorizer(ngram_range=(1, 2))
-X = vectorizer.fit_transform(corpus).toarray()
+X = corpus
 y = dataset.iloc[:, 1].values
 
-classifier = MultinomialNB()
-scores = cross_val_score(classifier, X, y, cv=10)
+pipes = []
+pipes.append(('unigram MultinomialNB', make_pipeline(
+    CountVectorizer(ngram_range=(1, 1)),
+    MultinomialNB())))
+pipes.append(('bigram MultinomialNB', make_pipeline(
+    CountVectorizer(ngram_range=(2, 2)),
+    MultinomialNB())))
+pipes.append(('unigram+bigram MultinomialNB', make_pipeline(
+    CountVectorizer(ngram_range=(1, 2)),
+    MultinomialNB())))
 
-print(scores)
-print("Accuracy Score is: ", scores.mean())
+pipes.append(('unigram LinearSVC', make_pipeline(
+    CountVectorizer(ngram_range=(1, 1)),
+    LinearSVC())))
+pipes.append(('bigram LinearSVC', make_pipeline(
+    CountVectorizer(ngram_range=(2, 2)),
+    LinearSVC())))
+pipes.append(('unigram+bigram LinearSVC', make_pipeline(
+    CountVectorizer(ngram_range=(1, 2)),
+    LinearSVC())))
+
+for title, pipe in pipes:
+    scoring = {
+        'accuracy': 'accuracy',
+        'precision': 'precision',
+        'recall': 'recall'
+    }
+    scores = cross_validate(
+        pipe, X, y, cv=10, scoring=scoring, return_train_score=False)
+
+    print(f"\nScores for {title}")
+    print("  accuracy: %.3f +/- %.3f" %
+          (scores['test_accuracy'].mean(), scores['test_accuracy'].std()))
+    print("  precision: %.3f +/- %.3f" %
+          (scores['test_precision'].mean(), scores['test_precision'].std()))
+    print("  recall: %.3f +/- %.3f" %
+          (scores['test_recall'].mean(), scores['test_recall'].std()))
