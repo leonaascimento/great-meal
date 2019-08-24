@@ -73,25 +73,26 @@ def improved_treatment(reviews):
 
 
 pipes = []
-pipes.append(('unigram MultinomialNB', make_pipeline(
-    CountVectorizer(ngram_range=(1, 1)),
-    MultinomialNB())))
-pipes.append(('bigram MultinomialNB', make_pipeline(
-    CountVectorizer(ngram_range=(2, 2)),
-    MultinomialNB())))
-pipes.append(('unigram+bigram MultinomialNB', make_pipeline(
-    CountVectorizer(ngram_range=(1, 2)),
-    MultinomialNB())))
+pipes.append(('SentiLexiconNB unigram',
+              CountVectorizer(ngram_range=(1, 1)), SentiLexiconNB()))
+pipes.append(('SentiLexiconNB bigram',
+              CountVectorizer(ngram_range=(2, 2)), SentiLexiconNB()))
+pipes.append(('SentiLexiconNB unigram+bigram',
+              CountVectorizer(ngram_range=(1, 2)), SentiLexiconNB()))
 
-pipes.append(('unigram LinearSVC', make_pipeline(
-    CountVectorizer(ngram_range=(1, 1)),
-    LinearSVC())))
-pipes.append(('bigram LinearSVC', make_pipeline(
-    CountVectorizer(ngram_range=(2, 2)),
-    LinearSVC())))
-pipes.append(('unigram+bigram LinearSVC', make_pipeline(
-    CountVectorizer(ngram_range=(1, 2)),
-    LinearSVC())))
+pipes.append(('MultinomialNB unigram',
+              CountVectorizer(ngram_range=(1, 1)), MultinomialNB()))
+pipes.append(('MultinomialNB bigram',
+              CountVectorizer(ngram_range=(2, 2)), MultinomialNB()))
+pipes.append(('MultinomialNB unigram+bigram',
+              CountVectorizer(ngram_range=(1, 2)), MultinomialNB()))
+
+pipes.append(('MultinomialNB unigram',
+              CountVectorizer(ngram_range=(1, 1)), LinearSVC()))
+pipes.append(('MultinomialNB bigram',
+              CountVectorizer(ngram_range=(2, 2)), LinearSVC()))
+pipes.append(('MultinomialNB unigram+bigram',
+              CountVectorizer(ngram_range=(1, 2)), LinearSVC()))
 
 dataset = pd.read_csv('assets/Restaurant_Reviews.tsv', delimiter='\t')
 
@@ -102,16 +103,24 @@ corpora = []
 corpora.append(('default treatment', X1, y1))
 corpora.append(('improved treatment', X2, y2))
 
-for title, pipe in pipes:
+for title, vectorizer, classifier in pipes:
     scoring = {
         'accuracy': 'accuracy',
         'precision': 'precision',
         'recall': 'recall'
     }
 
-    for treatment, X, y in corpora:
+    for treatment, corpus, labels in corpora:
+        X = vectorizer.fit_transform(corpus)
+        y = labels
+
+        params = None
+
+        if isinstance(classifier, SentiLexiconNB):
+            params = {'vectorizer': vectorizer}
+
         scores = cross_validate(
-            pipe, X, y, cv=10, scoring=scoring, return_train_score=False)
+            classifier, X, y, cv=10, fit_params=params, scoring=scoring)
 
         print(f"\nScores for {title} with {treatment}")
         print("  accuracy: %.3f +/- %.3f" %
