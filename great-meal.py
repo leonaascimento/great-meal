@@ -1,19 +1,16 @@
 import re
 
-import nltk
 import numpy as np
 import pandas as pd
-from nltk import pos_tag, word_tokenize
-from nltk.corpus import stopwords, wordnet
+from nltk import pos_tag
+from nltk.corpus import sentiwordnet, stopwords, wordnet
 from nltk.stem import WordNetLemmatizer
-from nltk.stem.porter import PorterStemmer
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.model_selection import cross_validate
+from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.pipeline import make_pipeline
 from sklearn.svm import LinearSVC
 
-from naive_bayes import SentiLexiconNB
+from naive_bayes import SentiLexiconNB, SentimentScore
 
 
 def wordnet_tag(penn_tag):
@@ -29,103 +26,107 @@ def wordnet_tag(penn_tag):
         return None
 
 
-def default_treatment(reviews):
-    regex = r"[-'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
-    stemmer = PorterStemmer()
+dataset = pd.read_csv('assets/Restaurant_Reviews.tsv', delimiter='\t')
+preprocessing_regex = r"[-'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
+lemmatizer = WordNetLemmatizer()
 
-    corpus = []
-    for review in reviews:
-        words = re.findall(regex, review)
-        stems = [stemmer.stem(word) for word in words if not word in set(
-            stopwords.words('english'))]
+corpus = []
+senti_lexicon = {}
+for review in dataset['Review']:
+    words = re.findall(preprocessing_regex, review)
+    tagged_review = pos_tag(words)
 
-        corpus.append(' '.join(stems))
+    tokens = []
+    for word, penn_tag in tagged_review:
+        wn_tag = wordnet_tag(penn_tag)
+        if wn_tag not in (wordnet.NOUN, wordnet.ADJ, wordnet.ADV):
+            continue
 
-    X = corpus
-    y = dataset.iloc[:, 1].values
+        lemma = lemmatizer.lemmatize(word, pos=wn_tag)
+        if not lemma:
+            continue
 
-    return (X, y)
+        synsets = wordnet.synsets(lemma, pos=wn_tag)
+        if not synsets:
+            continue
+
+        most_common_synset = synsets[0].name()
+        senti_synset = sentiwordnet.senti_synset(most_common_synset)
+
+        token = f"{lemma}_{wn_tag[0]}".lower()
+
+        tokens.append(token)
+        senti_lexicon[token] = SentimentScore(
+            senti_synset.pos_score(),
+            senti_synset.neg_score())
+
+    corpus.append(' '.join(tokens))
 
 
-def improved_treatment(reviews):
-    regex = r"[-'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
-    lemmatizer = WordNetLemmatizer()
-
-    corpus = []
-    for review in reviews:
-        words = re.findall(regex, review)
-        tagged_review = pos_tag(words)
-
-        lemmas = []
-        for word, penn_tag in tagged_review:
-            tag = wordnet_tag(penn_tag)
-
-            if tag in (wordnet.NOUN, wordnet.ADJ, wordnet.ADV):
-                lemma = lemmatizer.lemmatize(word, pos=tag)
-                lemmas.append(f'{lemma}_{penn_tag[0]}')
-
-        corpus.append(' '.join(lemmas))
-
-    X = corpus
-    y = dataset.iloc[:, 1].values
-
-    return (X, y)
-
+vectorizing_regex = r"[-_'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
 
 pipes = []
 pipes.append(('SentiLexiconNB unigram',
-              CountVectorizer(ngram_range=(1, 1)), SentiLexiconNB()))
+              CountVectorizer(ngram_range=(1, 1), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              SentiLexiconNB(senti_lexicon)))
 pipes.append(('SentiLexiconNB bigram',
-              CountVectorizer(ngram_range=(2, 2)), SentiLexiconNB()))
+              CountVectorizer(ngram_range=(2, 2), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              SentiLexiconNB(senti_lexicon)))
 pipes.append(('SentiLexiconNB unigram+bigram',
-              CountVectorizer(ngram_range=(1, 2)), SentiLexiconNB()))
+              CountVectorizer(ngram_range=(1, 2), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              SentiLexiconNB(senti_lexicon)))
 
 pipes.append(('MultinomialNB unigram',
-              CountVectorizer(ngram_range=(1, 1)), MultinomialNB()))
+              CountVectorizer(ngram_range=(1, 1), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              MultinomialNB()))
 pipes.append(('MultinomialNB bigram',
-              CountVectorizer(ngram_range=(2, 2)), MultinomialNB()))
+              CountVectorizer(ngram_range=(2, 2), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              MultinomialNB()))
 pipes.append(('MultinomialNB unigram+bigram',
-              CountVectorizer(ngram_range=(1, 2)), MultinomialNB()))
+              CountVectorizer(ngram_range=(1, 2), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              MultinomialNB()))
 
-pipes.append(('MultinomialNB unigram',
-              CountVectorizer(ngram_range=(1, 1)), LinearSVC()))
-pipes.append(('MultinomialNB bigram',
-              CountVectorizer(ngram_range=(2, 2)), LinearSVC()))
-pipes.append(('MultinomialNB unigram+bigram',
-              CountVectorizer(ngram_range=(1, 2)), LinearSVC()))
+pipes.append(('LinearSVC unigram',
+              CountVectorizer(ngram_range=(1, 1), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              LinearSVC()))
+pipes.append(('LinearSVC bigram',
+              CountVectorizer(ngram_range=(2, 2), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              LinearSVC()))
+pipes.append(('LinearSVC unigram+bigram',
+              CountVectorizer(ngram_range=(1, 2), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              LinearSVC()))
 
-dataset = pd.read_csv('assets/Restaurant_Reviews.tsv', delimiter='\t')
+scoring = {
+    'accuracy': 'accuracy',
+    'precision': 'precision',
+    'recall': 'recall'
+}
 
-X1, y1 = default_treatment(dataset['Review'])
-X2, y2 = improved_treatment(dataset['Review'])
-
-corpora = []
-corpora.append(('default treatment', X1, y1))
-corpora.append(('improved treatment', X2, y2))
+y = dataset.iloc[:, 1].values
 
 for title, vectorizer, classifier in pipes:
-    scoring = {
-        'accuracy': 'accuracy',
-        'precision': 'precision',
-        'recall': 'recall'
-    }
+    X = vectorizer.fit_transform(corpus)
 
-    for treatment, corpus, labels in corpora:
-        X = vectorizer.fit_transform(corpus)
-        y = labels
+    params = None
+    if isinstance(classifier, SentiLexiconNB):
+        params = {'feature_names': vectorizer.get_feature_names()}
 
-        params = None
+    scores = cross_validate(
+        classifier, X, y, cv=10, fit_params=params, scoring=scoring, error_score='raise')
 
-        if isinstance(classifier, SentiLexiconNB):
-            params = {'vectorizer': vectorizer}
-
-        scores = cross_validate(
-            classifier, X, y, cv=10, fit_params=params, scoring=scoring)
-
-        print(f"\nScores for {title} with {treatment}")
-        print("  accuracy: %.3f +/- %.3f" %
-              (scores['test_accuracy'].mean(), scores['test_accuracy'].std()))
-        print("  precision: %.3f +/- %.3f" %
-              (scores['test_precision'].mean(), scores['test_precision'].std()))
-        print("  recall: %.3f +/- %.3f" %
-              (scores['test_recall'].mean(), scores['test_recall'].std()))
+    print(f"\nScores for {title}")
+    print("  accuracy: %.3f +/- %.3f" %
+          (scores['test_accuracy'].mean(), scores['test_accuracy'].std()))
+    print("  precision: %.3f +/- %.3f" %
+          (scores['test_precision'].mean(), scores['test_precision'].std()))
+    print("  recall: %.3f +/- %.3f" %
+          (scores['test_recall'].mean(), scores['test_recall'].std()))
