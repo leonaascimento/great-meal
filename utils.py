@@ -1,7 +1,7 @@
 import re
 
 from nltk import pos_tag
-from nltk.corpus import wordnet, sentiwordnet
+from nltk.corpus import sentiwordnet, wordnet
 from nltk.stem import WordNetLemmatizer
 
 

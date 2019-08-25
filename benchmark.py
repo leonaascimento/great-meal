@@ -1,18 +1,13 @@
-import re
 import time
 
-import numpy as np
 import pandas as pd
-from nltk import pos_tag
-from nltk.corpus import sentiwordnet, stopwords, wordnet
-from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import CountVectorizer
-from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.model_selection import cross_validate
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC
 
 from naive_bayes import BaseSentiLexiconNB, SentiLexiconNB1, SentiLexiconNB2
-from utils import ReviewPreprocessing, penn_to_wordnet_tag
+from utils import ReviewPreprocessing
 
 dataset = pd.read_csv('assets/Restaurant_Reviews.tsv', delimiter='\t')
 
