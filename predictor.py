@@ -32,4 +32,6 @@ while True:
     preprocessed_review = preprocessing.transform([review])
     X = vectorizer.transform(preprocessed_review)
 
-    print(classifier.predict(X))
+    sentiment = 'Positive' if classifier.predict(X)[0] else 'Negative'
+
+    print(sentiment)
