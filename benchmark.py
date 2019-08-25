@@ -1,4 +1,5 @@
 import re
+import time
 
 import numpy as np
 import pandas as pd
@@ -83,6 +84,7 @@ scoring = {
 y = dataset.iloc[:, 1].values
 
 for title, vectorizer, classifier in pipes:
+    start = time.time()
     X = vectorizer.fit_transform(corpus)
 
     params = None
@@ -92,6 +94,7 @@ for title, vectorizer, classifier in pipes:
     scores = cross_validate(
         classifier, X, y, cv=10, fit_params=params, scoring=scoring, error_score='raise')
 
+    end = time.time()
     print(f"\nScores for {title}")
     print("  accuracy: %.3f +/- %.3f" %
           (scores['test_accuracy'].mean(), scores['test_accuracy'].std()))
@@ -99,3 +102,5 @@ for title, vectorizer, classifier in pipes:
           (scores['test_precision'].mean(), scores['test_precision'].std()))
     print("  recall: %.3f +/- %.3f" %
           (scores['test_recall'].mean(), scores['test_recall'].std()))
+    print("  execution time: %.6f seg" %
+          (end - start))
