@@ -10,7 +10,7 @@ from sklearn.model_selection import StratifiedKFold, cross_validate
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC
 
-from naive_bayes import SentiLexiconNB, SentimentScore
+from naive_bayes import SentiLexiconNB, SentiLexiconNB2, SentimentScore
 
 
 def wordnet_tag(penn_tag):
@@ -66,18 +66,31 @@ for review in dataset['Review']:
 vectorizing_regex = r"[-_'a-zA-ZÀ-ÖØ-öø-ÿ0-9]+"
 
 pipes = []
-pipes.append(('SentiLexiconNB unigram',
+pipes.append(('SentiLexiconNB1 unigram',
               CountVectorizer(ngram_range=(1, 1), analyzer='word',
                               token_pattern=vectorizing_regex),
               SentiLexiconNB(senti_lexicon)))
-pipes.append(('SentiLexiconNB bigram',
+pipes.append(('SentiLexiconNB1 bigram',
               CountVectorizer(ngram_range=(2, 2), analyzer='word',
                               token_pattern=vectorizing_regex),
               SentiLexiconNB(senti_lexicon)))
-pipes.append(('SentiLexiconNB unigram+bigram',
+pipes.append(('SentiLexiconNB1 unigram+bigram',
               CountVectorizer(ngram_range=(1, 2), analyzer='word',
                               token_pattern=vectorizing_regex),
               SentiLexiconNB(senti_lexicon)))
+
+pipes.append(('SentiLexiconNB2 unigram',
+              CountVectorizer(ngram_range=(1, 1), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              SentiLexiconNB2(senti_lexicon)))
+pipes.append(('SentiLexiconNB2 bigram',
+              CountVectorizer(ngram_range=(2, 2), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              SentiLexiconNB2(senti_lexicon)))
+pipes.append(('SentiLexiconNB2 unigram+bigram',
+              CountVectorizer(ngram_range=(1, 2), analyzer='word',
+                              token_pattern=vectorizing_regex),
+              SentiLexiconNB2(senti_lexicon)))
 
 pipes.append(('MultinomialNB unigram',
               CountVectorizer(ngram_range=(1, 1), analyzer='word',
@@ -117,7 +130,7 @@ for title, vectorizer, classifier in pipes:
     X = vectorizer.fit_transform(corpus)
 
     params = None
-    if isinstance(classifier, SentiLexiconNB):
+    if isinstance(classifier, SentiLexiconNB) or isinstance(classifier, SentiLexiconNB2):
         params = {'feature_names': vectorizer.get_feature_names()}
 
     scores = cross_validate(

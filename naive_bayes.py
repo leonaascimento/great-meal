@@ -44,3 +44,41 @@ class SentiLexiconNB(MultinomialNB):
     def predict(self, X):
         jll = self._log_ratio_of_pattern(X) + self._joint_log_likelihood(X)
         return self.classes_[np.argmax(jll, axis=1)]
+
+
+class SentiLexiconNB2(MultinomialNB):
+    def __init__(self, senti_lexicon, alpha=1.0, fit_prior=True, class_prior=None):
+        super().__init__(alpha=alpha, fit_prior=fit_prior, class_prior=class_prior)
+        self.senti_lexicon = senti_lexicon
+
+    def _log_ratio_of_pattern(self, X):
+        _, cols = X.nonzero()
+
+        belonging_cons = np.log(0.9999)
+        diverging_cons = np.log(0.0001)
+
+        pos_ratio = neg_ratio = 0
+        for col in cols:
+            feature = self.feature_names[col]
+            score = self.senti_lexicon.get(feature)
+
+            score_delta = score.delta if score is not None else 0
+
+            if score_delta > 0:
+                pos_ratio += belonging_cons
+                neg_ratio += diverging_cons
+
+            if score_delta < 0:
+                pos_ratio += diverging_cons
+                neg_ratio += belonging_cons
+
+        return [neg_ratio, pos_ratio]
+
+    def fit(self, X, y, feature_names, sample_weight=None):
+        self.feature_names = feature_names
+        super().fit(X, y, sample_weight=sample_weight)
+        return self
+
+    def predict(self, X):
+        jll = self._log_ratio_of_pattern(X) + self._joint_log_likelihood(X)
+        return self.classes_[np.argmax(jll, axis=1)]
