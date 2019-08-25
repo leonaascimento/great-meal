@@ -5,13 +5,6 @@ from nltk.corpus import sentiwordnet
 from sklearn.naive_bayes import MultinomialNB
 
 
-class SentimentScore:
-    def __init__(self, pos, neg):
-        self.pos = pos
-        self.neg = neg
-        self.delta = pos - neg
-
-
 class BaseSentiLexiconNB(MultinomialNB):
     @abstractmethod
     def _readjustment_log_likelihood(self, X):
